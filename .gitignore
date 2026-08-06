@@ -1,0 +1,19 @@
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example
+
+# Build and analysis output
+/build/
+/build-*/
+/.cache/
+/.venv/
+**/__pycache__/
+*.py[cod]
+
+# Local agent/tool state
+/.beads/
+/.serena/
+
+# Non-authoritative scratch research
+/docs/tmp/

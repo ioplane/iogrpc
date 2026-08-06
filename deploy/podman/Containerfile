@@ -1,0 +1,156 @@
+FROM oraclelinux:10
+
+LABEL maintainer="iogrpc development team"
+LABEL description="Development environment for iogrpc — C23 gRPC runtime with io_uring and wolfSSL"
+
+# Build arguments for tool versions
+ARG CMAKE_VERSION=4.2.3
+ARG CLANG_VERSION=22.1.0
+ARG DOXYGEN_VERSION=1.16.1
+ARG UNITY_VERSION=2.6.1
+ARG WOLFSSL_VERSION=5.8.4
+ARG LIBURING_VERSION=2.14
+ARG NGHTTP2_VERSION=1.68.0
+ARG PROTOBUF_C_VERSION=1.5.1
+ARG PROTOBUF_VERSION=29.3
+
+# Enable CodeReady Builder repo
+RUN dnf install -y oraclelinux-developer-release-el10 && \
+    dnf config-manager --set-enabled ol10_codeready_builder && \
+    dnf clean all
+
+# Base development tools
+RUN dnf install -y \
+    gcc gcc-c++ make autoconf automake libtool pkgconfig git vim gdb \
+    valgrind strace wget curl tar xz bzip2 patch flex bison \
+    && dnf clean all
+
+# Compilers (GCC 15 and Clang 22)
+RUN dnf install -y \
+    gcc-toolset-15-gcc \
+    gcc-toolset-15-gcc-c++ \
+    gcc-toolset-15-libatomic-devel \
+    gcc-toolset-15-libasan-devel \
+    gcc-toolset-15-libubsan-devel \
+    gcc-toolset-15-libtsan-devel \
+    gcc-toolset-15-binutils \
+    && dnf clean all && \
+    ln -sf /opt/rh/gcc-toolset-15/root/usr/bin/gcc /usr/local/bin/gcc-15 && \
+    ln -sf /opt/rh/gcc-toolset-15/root/usr/bin/g++ /usr/local/bin/g++-15
+
+RUN cd /tmp && \
+    curl -fsSL -o llvm.tar.xz \
+        https://github.com/llvm/llvm-project/releases/download/llvmorg-${CLANG_VERSION}/LLVM-${CLANG_VERSION}-Linux-X64.tar.xz && \
+    tar xJf llvm.tar.xz && \
+    LLVM_DIR=LLVM-${CLANG_VERSION}-Linux-X64 && \
+    CLANG_MAJOR=$(echo ${CLANG_VERSION} | cut -d. -f1) && \
+    for tool in clang clang++ clang-format clang-tidy lld ld.lld llvm-ar llvm-nm llvm-objdump llvm-ranlib llvm-strip llvm-symbolizer llvm-profdata llvm-cov llvm-objcopy llvm-readelf llvm-size llvm-strings llvm-addr2line scan-build scan-view; do \
+        [ -e "$LLVM_DIR/bin/$tool" ] && cp -a "$LLVM_DIR/bin/$tool" /usr/local/bin/; \
+    done && \
+    cp -a $LLVM_DIR/lib/clang /usr/local/lib/ && \
+    rm -rf /tmp/LLVM-* /tmp/llvm.tar.xz && \
+    ldconfig
+
+# System dependencies
+RUN dnf install -y zlib-devel brotli-devel lz4-devel openssl-devel python3 python3-pip graphviz \
+    && dnf clean all && pip3 install ninja flawfinder gcovr codechecker
+
+# Build CMake from source
+RUN cd /tmp && \
+    wget https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}.tar.gz && \
+    tar xzf cmake-${CMAKE_VERSION}.tar.gz && \
+    cd cmake-${CMAKE_VERSION} && \
+    ./bootstrap --prefix=/usr/local --parallel=$(nproc) && \
+    make -j$(nproc) && \
+    make install && \
+    cd /tmp && rm -rf cmake-*
+
+# Install Unity testing framework
+RUN cd /tmp && \
+    wget https://github.com/ThrowTheSwitch/Unity/archive/refs/tags/v${UNITY_VERSION}.tar.gz && \
+    tar xzf v${UNITY_VERSION}.tar.gz && \
+    cd Unity-${UNITY_VERSION} && \
+    mkdir -p /usr/local/include/unity && \
+    mkdir -p /usr/local/src/unity && \
+    cp src/unity.h src/unity_internals.h /usr/local/include/unity/ && \
+    cp src/unity.c /usr/local/src/unity/ && \
+    cd /tmp && rm -rf Unity-* v${UNITY_VERSION}.tar.gz
+
+# core: wolfSSL
+RUN cd /tmp && \
+    wget https://github.com/wolfSSL/wolfssl/archive/refs/tags/v${WOLFSSL_VERSION}-stable.tar.gz && \
+    tar xzf v${WOLFSSL_VERSION}-stable.tar.gz && \
+    cd wolfssl-${WOLFSSL_VERSION}-stable && \
+    ./autogen.sh && \
+    ./configure --enable-tls13 --enable-alpn --enable-sni --enable-opensslextra --enable-opensslall --enable-quic --prefix=/usr/local CFLAGS="-std=gnu11 -O2 -g -fstack-protector-strong" LDFLAGS="-Wl,-z,relro -Wl,-z,now" && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd /tmp && rm -rf wolfssl-*
+
+# I/O: liburing
+RUN cd /tmp && \
+    wget https://github.com/axboe/liburing/archive/refs/tags/liburing-${LIBURING_VERSION}.tar.gz && \
+    tar xzf liburing-${LIBURING_VERSION}.tar.gz && \
+    cd liburing-liburing-${LIBURING_VERSION} && \
+    ./configure --prefix=/usr/local && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd /tmp && rm -rf liburing-*
+
+# HTTP/2: nghttp2
+RUN cd /tmp && \
+    wget https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.gz && \
+    tar xzf nghttp2-${NGHTTP2_VERSION}.tar.gz && \
+    cd nghttp2-${NGHTTP2_VERSION} && \
+    mkdir build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DENABLE_LIB_ONLY=ON && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd /tmp && rm -rf nghttp2-*
+
+# ═══════════════════════════════════════════════════════
+# gRPC dependencies: Protobuf (C++) and Protobuf-C
+# ═══════════════════════════════════════════════════════
+
+RUN cd /tmp && \
+    wget https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-${PROTOBUF_VERSION}.tar.gz && \
+    tar xzf protobuf-${PROTOBUF_VERSION}.tar.gz && \
+    cd protobuf-${PROTOBUF_VERSION} && \
+    mkdir build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -Dprotobuf_BUILD_TESTS=OFF && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd /tmp && rm -rf protobuf-*
+
+RUN cd /tmp && \
+    wget https://github.com/protobuf-c/protobuf-c/releases/download/v${PROTOBUF_C_VERSION}/protobuf-c-${PROTOBUF_C_VERSION}.tar.gz && \
+    tar xzf protobuf-c-${PROTOBUF_C_VERSION}.tar.gz && \
+    cd protobuf-c-${PROTOBUF_C_VERSION} && \
+    ./configure --prefix=/usr/local && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd /tmp && rm -rf protobuf-c-*
+
+# Linker: mold
+RUN cd /tmp && \
+    git clone --depth 1 --branch v2.40.4 https://github.com/rui314/mold.git && \
+    cd mold && \
+    mkdir build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local && \
+    make -j$(nproc) && \
+    make install && \
+    cd /tmp && rm -rf mold
+
+# Static Analysis (PVS-Studio)
+RUN wget -qO /etc/yum.repos.d/viva64.repo https://cdn.pvs-studio.ru/etc/viva64.repo && \
+    dnf install -y pvs-studio && \
+    dnf clean all
+
+RUN ldconfig
+WORKDIR /workspace
+CMD ["/bin/bash"]
