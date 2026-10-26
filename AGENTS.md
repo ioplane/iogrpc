@@ -7,9 +7,10 @@ cross-repository work.
 ## Current status
 
 The checkout contains CMake and planning scaffolding but no implementation
-files under `src/`, `include/`, tests, examples, or Git metadata. Never report a
-CMake source list as a built feature. The bootstrap plan is
-`docs/plan/2026-08-06-iogrpc-plan.md`.
+files under `src/`, `include/`, tests, or examples. The GitHub repository now
+exists on `main`. Never report a CMake source list as a built feature. The
+current development plan is
+`docs/plan/2026-10-26-iogrpc-agent-development-plan.md`; the August bootstrap plan remains historical input.
 
 ## Architecture and build
 
