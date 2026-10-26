@@ -15,7 +15,8 @@ tests, examples, and code generator are not implemented yet. Do not interpret
 the CMake source list as a built feature.
 
 The implementation plan is
-[`docs/plan/2026-08-06-iogrpc-plan.md`](docs/plan/2026-08-06-iogrpc-plan.md).
+[`docs/plan/2026-10-26-iogrpc-agent-development-plan.md`](docs/plan/2026-10-26-iogrpc-agent-development-plan.md).
+The [August bootstrap plan](docs/plan/2026-08-06-iogrpc-plan.md) remains historical input.
 
 ## Planned build workflow
 
