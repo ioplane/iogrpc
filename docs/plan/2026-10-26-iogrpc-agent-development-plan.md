@@ -46,6 +46,17 @@ Keep protobuf-c ownership explicit; a protoc plugin is later isolated host tooli
 must not add a C++ runtime. No custom H2 runtime, universal reactor, ngtun dependency or
 shared-core extraction is introduced. No open PR was observed at the audit snapshot.
 
+## Planned GitLab handoff
+
+The owner plans import to `https://gitlab.infra4.dev/ioplane/network/iogrpc`;
+import completion is unverified. This GitHub PR is a pre-import transferable
+patchset: retain its exact base/head and parent history. After the owner import,
+bind actual GitLab project ID, default SHA/refs and reviews, compare history,
+and read the post-import contribution contract. Future implementation uses the
+accepted GitLab destination after CI, registry, ACL and host-identity receipts;
+the GitHub publication rules below describe only pre-import delivery. This plan
+performs no import, group transfer, remote/config change or PR closure.
+
 ## Publication contract
 
 Retain `docs/plan/` and the existing dated-name grammar. Preserve earlier plans as
